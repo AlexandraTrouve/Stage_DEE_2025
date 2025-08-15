@@ -5,8 +5,8 @@ library(dplyr)
 library(tools)
 args = commandArgs(trailingOnly=TRUE)
 
-input_files <- args[1:2]
-output_file <- args[3]
+input_files <- args[1:8]
+output_file <- args[9]
 
 all_data_list <- list()
 for (file_path in input_files) {

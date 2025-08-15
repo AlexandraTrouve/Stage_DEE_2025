@@ -1,7 +1,0 @@
-Assuming unrestricted shared filesystem usage.
-None
-host: wl5s-254-25.unil.ch
-Building DAG of jobs...
-WildcardError in rule all in file "/Users/children/Desktop/Stage_2025/scripts/zebrafish_organs/Snakefile", line 8:
-Wildcards in input files cannot be determined from output files: (rule all, line 8, /Users/children/Desktop/Stage_2025/scripts/zebrafish_organs/Snakefile)
-'sample'
