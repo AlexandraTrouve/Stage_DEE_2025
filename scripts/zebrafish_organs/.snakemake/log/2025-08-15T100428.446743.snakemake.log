@@ -1,0 +1,50 @@
+Assuming unrestricted shared filesystem usage.
+None
+host: wl5s-254-25.unil.ch
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Job stats:
+job                          count
+-------------------------  -------
+PredictionOtherModel             7
+all                              1
+combined_sequences_scores        1
+heatmap                          1
+pred_AUC_OtherModel              1
+scores                           1
+sequences_scores                 2
+simple_AUC                       1
+total                           15
+
+Select jobs to execute...
+Execute 1 jobs...
+[Fri Aug 15 10:04:29 2025]
+localrule scores:
+    input: ../../results/zebrafish_organs/prediction/brain.pred.txt, ../../results/zebrafish_organs/prediction/ovary.pred.txt, ../../results/zebrafish_organs/prediction/testis.pred.txt, ../../results/zebrafish_organs/prediction/eye.pred.txt, ../../results/zebrafish_organs/prediction/liver.pred.txt, ../../results/zebrafish_organs/prediction/pectoral_fin.pred.txt, ../../results/zebrafish_organs/prediction/gills.pred.txt, ../../results/zebrafish_organs/prediction/intestine.pred.txt
+    output: ../../results/zebrafish_organs/prediction/scores.csv
+    jobid: 37
+    reason: Missing output files: ../../results/zebrafish_organs/prediction/scores.csv
+    resources: tmpdir=/var/folders/7c/65x0b2m90w39sqm5h28151rr0000gp/T
+
+Select jobs to execute...
+Waiting at most 5 seconds for missing files:
+../../results/zebrafish_organs/prediction/scores.csv (missing locally)
+MissingOutputException in rule scores in file "/Users/children/Desktop/Stage_2025/scripts/zebrafish_organs/Snakefile", line 112:
+Job 37  completed successfully, but some output files are missing. Missing files after 5 seconds. This might be due to filesystem latency. If that is the case, consider to increase the wait time with --latency-wait:
+../../results/zebrafish_organs/prediction/scores.csv (missing locally, parent dir contents: liver.pred.txt, pectoral_fin.pred.txt, gills.pred.txt, intestine.pred.txt, brain.pred.txt, eye.pred.txt, logOtherModel, log, testis.pred.txt, training_cluster, ovary.pred.txt)
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look below for error messages
+[Fri Aug 15 10:04:39 2025]
+Error in rule scores:
+    message: None
+    jobid: 37
+    input: ../../results/zebrafish_organs/prediction/brain.pred.txt, ../../results/zebrafish_organs/prediction/ovary.pred.txt, ../../results/zebrafish_organs/prediction/testis.pred.txt, ../../results/zebrafish_organs/prediction/eye.pred.txt, ../../results/zebrafish_organs/prediction/liver.pred.txt, ../../results/zebrafish_organs/prediction/pectoral_fin.pred.txt, ../../results/zebrafish_organs/prediction/gills.pred.txt, ../../results/zebrafish_organs/prediction/intestine.pred.txt
+    output: ../../results/zebrafish_organs/prediction/scores.csv
+    shell:
+        Rscript Snakemake_progs/6.scores.R ../../results/zebrafish_organs/prediction/brain.pred.txt ../../results/zebrafish_organs/prediction/ovary.pred.txt ../../results/zebrafish_organs/prediction/testis.pred.txt ../../results/zebrafish_organs/prediction/eye.pred.txt ../../results/zebrafish_organs/prediction/liver.pred.txt ../../results/zebrafish_organs/prediction/pectoral_fin.pred.txt ../../results/zebrafish_organs/prediction/gills.pred.txt ../../results/zebrafish_organs/prediction/intestine.pred.txt ../../results/zebrafish_organs/prediction/scores.csv
+        (command exited with non-zero exit code)
+Complete log(s): /Users/children/Desktop/Stage_2025/scripts/zebrafish_organs/.snakemake/log/2025-08-15T100428.446743.snakemake.log
+WorkflowError:
+At least one job did not complete successfully.

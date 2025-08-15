@@ -1,0 +1,340 @@
+###### programmes stage - snakemake
+
+
+clusters = ['hourglass','inverse_hourglass','early_constraint','late_constraint','uniform_high','uniform_low']
+promoters_type = ['promoters','table_promoters']
+set_type = ['posSet','negSet']
+scores = ['phyloP', 'phastCons']
+node = ['ancestral', 'focal']
+
+
+rule all:
+    input:
+        heatmap  = expand('../../results/drosophila/{p_type}/analyses.pdf', p_type = promoters_type),
+        simple_AUC = expand('../../results/drosophila/{p_type}/analyses/AUC/AUC.pdf', p_type = promoters_type),
+        SI_score_graph = expand('../../results/drosophila/{p_type}/analyses/SI_score_graph.pdf', p_type = promoters_type),
+        pred_pos = expand('../../results/drosophila/{p_type}/prediction/training_cluster/{sample_to_score}_pos.pred.using_{sample}_model.txt', p_type = promoters_type, sample_to_score = clusters, sample = clusters),
+        pred_neg = expand('../../results/drosophila/{p_type}/prediction/training_cluster/{sample_to_score}_neg.pred.using_{sample}_model.txt', p_type = promoters_type, sample_to_score = clusters, sample = clusters),
+        pred_AUC_pdf = expand('../../results/drosophila/{p_type}/analyses/AUC/training_cluster/{sample}_scores_OtherModel.pdf', p_type = promoters_type, sample = clusters),
+        boxplot_file = '../../results/drosophila/shape_index/analyses/SI_boxplot.pdf',
+        evo_output = expand('../../results/drosophila/{p_type}/analyses/evolution_scores/analyses.pdf', p_type = promoters_type),
+        analyses = expand('../../results/drosophila/{p_type}/analyses/positive_selection/MLE_analyses.pdf', p_type = promoters_type)
+
+
+rule promoters_coord:
+    input:
+        droso_genes = '../../data/drosophila/genes_information.txt',
+        table = '../../data/drosophila/Table.txt',
+        studied = '../../data/drosophila/assigned.modules.txt',
+        conversion = '../../data/drosophila/conversion_files/chromosome_correspondence_Ensembl2UCSC.txt'
+    output:
+        promoters_coord = '../../results/drosophila/promoters/coordinates/promoters_coord.bed',
+        table_promoters_coord1 = '../../results/drosophila/table_promoters/coordinates/table_promoters_coord1.bed',
+        table_to_lift = '../../results/drosophila/shape_index/table_to_lift.bed'
+    params:
+        promoter_length = 1000
+    shell:
+        'Rscript Snakemake_progs/1.promoters_coord.R {params.promoter_length} {input.droso_genes} {input.studied} {input.table} {input.conversion} {output.promoters_coord} {output.table_promoters_coord1} {output.table_to_lift}'
+
+
+rule liftOver:
+    wildcard_constraints:
+        p_type="table_promoters"  # only run for table promoters
+    input:
+        table_promoters_coord1 = '../../results/drosophila/{p_type}/coordinates/{p_type}_coord1.bed',
+        chain = '../../data/drosophila/dm3ToDm6.over.chain'
+    output:
+        table_promoters_ucsc = '../../results/drosophila/{p_type}/coordinates/{p_type}_ucsc.bed',
+        unmatch = '../../results/drosophila/{p_type}/coordinates/unMatch.bed'
+    shell:
+        'liftOver {input.table_promoters_coord1} {input.chain} {output.table_promoters_ucsc} {output.unmatch}'
+
+
+rule ucsc_ensembl_conversion:
+    wildcard_constraints:
+        p_type="table_promoters"  # only run for table promoters
+    input:
+        table_promoters_ucsc = '../../results/drosophila/{p_type}/coordinates/{p_type}_ucsc.bed',
+        correspondance = '../../data/drosophila/genes_correspondence_Ensembl2UCSC.txt'
+    output:
+        promoters_coord = '../../results/drosophila/{p_type}/coordinates/{p_type}_coord.bed'
+    shell:
+        'Rscript Snakemake_progs/2.ucsc_ensembl_conversion.R {input.table_promoters_ucsc} {input.correspondance} {output.promoters_coord}'
+
+
+rule cleaning:
+    input:
+        promoters_coord = '../../results/drosophila/{p_type}/coordinates/{p_type}_coord.bed',
+        all_genes = '../../data/drosophila/drosophila_all_genes.bed'
+    output:
+        clean_Set = '../../results/drosophila/{p_type}/coordinates/clean_coord.bed'
+    shell:
+        '../../tools/bedtools2/bin/bedtools subtract -a {input.promoters_coord} -b {input.all_genes} > {output.clean_Set}'
+
+
+rule cleaning2:
+    input:
+        clean_Set = '../../results/drosophila/{p_type}/coordinates/clean_coord.bed'
+    output:
+        clean2_Set = '../../results/drosophila/clean_coord/{p_type}_coord.bed'
+    shell:
+        'Rscript Snakemake_progs/3.cleaning_sets.R {input.clean_Set} {output.clean2_Set}'
+
+
+rule pos_Set:
+    input:
+        clean2_Set = '../../results/drosophila/clean_coord/{p_type}_coord.bed',
+        studied = '../../data/drosophila/assigned.modules.txt'
+    output:
+        pos_Set = expand('../../results/drosophila/{{p_type}}/sets/posSet/bed_files/{sample}.bed', sample = clusters)
+    shell:
+        'Rscript Snakemake_progs/4.ML_files.R {input.clean2_Set} {input.studied} ../../results/drosophila/{wildcards.p_type}/sets/posSet/bed_files/'
+
+
+rule neg_bed_files:
+    input:
+        pos_Set = '../../results/drosophila/{p_type}/sets/posSet/bed_files/{sample}.bed'
+    output:
+        neg_Set = '../../results/drosophila/{p_type}/sets/negSet/bed_files/{sample}.bed'
+    shell:
+        'Rscript Snakemake_progs/6.generate_negative_sequence.R drosophila {input.pos_Set} ../../results/drosophila/{wildcards.p_type}/sets/negSet/bed_files/{wildcards.sample}'
+
+
+rule sequences:
+    input:
+        Set = '../../results/drosophila/{p_type}/sets/{s_type}/bed_files/{sample}.bed'
+    output:
+        Sequences = expand('../../results/drosophila/{p_type}/sets/{s_type}/sequences/{sample}.fasta', s_type = set_type)
+    shell:
+        'python Snakemake_progs/7.promoters_sequences.py {input.Set} {output.Sequences}'
+
+
+rule train_ML:
+    input:
+        pos_seq = '../../results/drosophila/{p_type}/sets/posSet/sequences/{sample}.fasta',
+        neg_seq = '../../results/drosophila/{p_type}/sets/negSet/sequences/{sample}.fasta'
+    output:
+        train = '../../results/drosophila/{p_type}/train_model/{sample}.model.txt'
+    log: '../../results/drosophila/{p_type}/train_model/log/{sample}.log'
+    shell:
+        '../../tools/lsgkm/bin/gkmtrain -r 12 -l 10 {input.pos_seq} {input.neg_seq} ../../results/drosophila/{wildcards.p_type}/train_model/{wildcards.sample} > {log} 2>&1'
+
+
+rule cross_validation:
+    input:
+        pos_seq = '../../results/drosophila/{p_type}/sets/posSet/sequences/{sample}.fasta',
+        neg_seq = '../../results/drosophila/{p_type}/sets/negSet/sequences/{sample}.fasta'
+    output:
+        cross_val = '../../results/drosophila/{p_type}/cross_validation/{sample}.cvpred.txt'
+    log: '../../results/drosophila/{p_type}/cross_validation/log/{sample}.log'
+    shell:
+        '../../tools/lsgkm/bin/gkmtrain -r 12 -l 10 -x5 {input.pos_seq} {input.neg_seq} ../../results/drosophila/{wildcards.p_type}/cross_validation/{wildcards.sample} > {log} 2>&1'
+
+
+rule prediction:
+    input:
+        kmers = '../../data/drosophila/sequences/kmer.fa',
+        train = '../../results/drosophila/{p_type}/train_model/{sample}.model.txt'
+    output:
+        pred = '../../results/drosophila/{p_type}/prediction/clusters_pos_neg/{sample}.model.txt'
+    log: '../../results/drosophila/{p_type}/prediction/log/{sample}.log'
+    shell:
+        '../../tools/lsgkm/bin/gkmpredict -T 1 {input.kmers} {input.train} {output.pred} > {log} 2>&1'
+
+
+rule scores:
+    input:
+        pred = expand('../../results/drosophila/{{p_type}}/prediction/clusters_pos_neg/{sample}.model.txt', sample = clusters)
+    output:
+        scores = '../../results/drosophila/{p_type}/prediction/scores.csv'
+    shell:
+        'Rscript Snakemake_progs/8.scores.R {input.pred} {output.scores}'
+
+
+rule overlap:
+    input:
+        promoters_coord = '../../results/drosophila/promoters/coordinates/promoters_coord.bed',
+        table_promoters_ucsc = '../../results/drosophila/{p_type}/coordinates/{p_type}_ucsc.bed'
+    output:
+        overlap = '../../results/drosophila/shape_index/overlap.bed'
+    shell:
+        '../../tools/bedtools2/bin/intersectBed -wao -a {input.promoters_coord} -b {input.table_promoters_ucsc} > {output.overlap}'
+
+
+rule table_liftOver:
+    input:
+        table_to_lift = '../../results/drosophila/shape_index/table_to_lift.bed',
+        chain = '../../data/drosophila/dm3ToDm6.over.chain'
+    output:
+        table_lifted = '../../results/drosophila/shape_index/table_lifted.bed',
+        unMapped = '../../results/drosophila/shape_index/unMapped.bed'
+    shell:
+        'liftOver {input.table_to_lift} {input.chain} {output.table_lifted} {output.unMapped}'
+
+
+rule shape_index:
+    input:
+        table_lifted = '../../results/drosophila/shape_index/table_lifted.bed',
+        overlap = '../../results/drosophila/shape_index/overlap.bed',
+        studied = '../../data/drosophila/assigned.modules.txt'
+    output:
+        SI_promoters = '../../results/drosophila/shape_index/SI_all_promoters.txt'
+    shell:
+        'Rscript Snakemake_progs/9.shape_index.R {input.overlap} {input.table_lifted} {input.genes_studied} {output.SI_promoters}'
+
+
+rule sequences_scores:
+    input:
+        pred = pred = '../../results/drosophila/{p_type}/prediction/clusters_pos_neg/{sample}.model.txt',
+        Sequences = '../../results/drosophila/{p_type}/sets/posSet/sequences/{sample}.fasta'
+    output:
+        sequences_scores = '../../results/drosophila/{p_type}/analyses/scores/scores_{sample}.csv'
+    shell:
+        'python Snakemake_progs/10.all_scores.py {input.pred} {input.Sequences} {output.sequences_scores}'
+
+
+rule heatmap:
+    input:
+        scores = '../../results/drosophila/{p_type}/prediction/scores.csv'
+    output:
+        heatmap  = '../../results/drosophila/{p_type}/analyses/heatmap.pdf'
+    shell:
+        'python Snakemake_progs/11.heatmap.py {input.scores} {output.heatmap}'
+
+
+rule simple_AUC:
+    input:
+        cross_val = expand('../../results/drosophila/{{p_type}}/cross_validation/{sample}.cvpred.txt', sample = clusters)
+    output:
+        simple_AUC = '../../results/drosophila/{p_type}/analyses/AUC/AUC.pdf'
+    shell:
+        'Rscript Snakemake_progs/12.all_AUC.R {input.cross_val} {output.simple_AUC}'
+
+
+rule combined_sequences_scores:
+    input:
+        sequences_scores = expand('../../results/drosophila/{{p_type}}/analyses/scores/scores_{sample}.csv', sample = clusters)
+    output:
+        all_sequences_scores = '../../results/drosophila/{p_type}/analyses/score/all_scores.csv'
+    shell:
+        'Rscript Snakemake_progs/13.combined_seq_scores.R {input.sequences_scores} {output.all_sequences_scores}'
+
+
+rule SI_score_graph:
+    input:
+        all_sequences_scores = '../../results/drosophila/{p_type}/analyses/score/all_scores.csv',
+        SI_promoters = '../../results/drosophila/shape_index/SI_all_promoters.txt'
+    output:
+        SI_score_graph = '../../results/drosophila/{p_type}/analyses/SI_score_graph.pdf'
+    shell:
+        'Rscript Snakemake_progs/14.SI-score_graph.R {input.all_sequences_scores} {input.SI_promoters} {output.SI_score_graph}'
+
+
+rule PredictionOtherModel:
+    input:
+        pos_seq = '../../results/drosophila/{p_type}/sets/posSet/sequences/{sample}.fasta',
+        neg_seq = '../../results/drosophila/{p_type}/sets/posSet/sequences/{sample_to_score}.fasta',
+        train = '../../results/drosophila/{p_type}/train_model/{sample}.model.txt'
+    output:
+        pred_pos = '../../results/drosophila/{p_type}/prediction/training_cluster/{sample_to_score}_pos.pred.using_{sample}_model.txt',
+        pred_neg = '../../results/drosophila/{p_type}/prediction/training_cluster/{sample_to_score}_neg.pred.using_{sample}_model.txt'
+    log:
+        '../../results/drosophila/{p_type}/prediction/log/logOtherModel/{sample_to_score}_using_{sample}.log'
+    run:
+        shell("../../tools/lsgkm/bin/gkmpredict -T 1 {input.pos_seq} {input.train} {output.pred_pos} > {log} 2>&1")
+        shell("../../tools/lsgkm/bin/gkmpredict -T 1 {input.neg_seq} {input.train} {output.pred_neg} >> {log} 2>&1")
+
+
+rule pred_AUC_OtherModel:
+    input:
+        pred_pos = expand('../../results/drosophila/{{p_type}}/prediction/training_cluster/{sample_to_score}_pos.pred.using_{{sample}}_model.txt', sample_to_score = clusters),
+        pred_neg = expand('../../results/drosophila/{{p_type}}/prediction/training_cluster/{sample_to_score}_neg.pred.using_{{sample}}_model.txt', sample_to_score = clusters)
+    output:
+        pred_AUC_pdf = '../../results/drosophila/{p_type}/analyses/AUC/training_cluster/{sample}_scores_OtherModel.pdf'
+    shell:
+        "Rscript Snakemake_progs/15.pred_AUC_OtherModel.R {input.pred_pos} {input.pred_neg} {output.pred_AUC_pdf}"
+
+
+rule correlation:
+    input:
+        SI_promoters = '../../results/drosophila/shape_index/SI_all_promoters.txt',
+        sequences_scores = '../../results/drosophila/promoters/analyses/score/all_scores.csv',
+        table_sequences_scores = '../../results/drosophila/table_promoters/analyses/score/all_scores.csv'
+    output:
+        boxplot_file = '../../results/drosophila/shape_index/analyses/SI_boxplot.pdf',
+        correlation_file = '../../results/drosophila/shape_index/analyses/SI_scores_correlation.pdf'
+    log: '../../results/drosophila/shape_index/analyses/SI_boxplot.log'
+    shell:
+        'Rscript Snakemake_progs/16.Correlation.R {input.SI_promoters} {input.sequences_scores} {input.table_sequences_scores} {output.boxplot_file} {output.correlation_file} > {log} 2>&1'
+
+
+rule evo_scores:
+    input:
+        clean2_Set = '../../results/drosophila/clean_coord/{p_type}_coord.bed'
+    output:
+        expand(evolution_scores = '../../results/drosophila/{{p_type}}/analyses/evolution_scores/{scores_type}/scores.txt', scores_type = scores)
+    shell:
+        'python Snakemake_progs/17.get_score_per_base.py {input.clean2_Set} {output.evolution_scores}'
+
+
+rule mean_evo_scores:
+    input:
+        evolution_scores = '../../results/drosophila/{p_type}/analyses/evolution_scores/{scores_type}/scores.txt'
+    output:
+        mean_evolution_scores = '../../results/drosophila/{p_type}/analyses/evolution_scores/{scores_type}/mean_scores.csv'
+    shell:
+        'python Snakemake_progs/18.average_scores.py {input.evolution_scores} {output.mean_evolution_scores}'
+
+
+rule evo_analyses:
+    input:
+        SI_promoters = '../../results/drosophila/shape_index/SI_all_promoters.txt',
+        mean_phastCons_scores = '../../results/drosophila/{p_type}/analyses/evolution_scores/phastCons/mean_scores.csv',
+        mean_phyloP_scores = '../../results/drosophila/{p_type}/analyses/evolution_scores/phyloP/mean_scores.csv'
+    output:
+        evo_output = '../../results/drosophila/{p_type}/analyses/evolution_scores/analyses.pdf'
+    log: '../../results/drosophila/{p_type}/analyses/evolution_scores/statistics_results.log'
+    shell:
+        'Rscript Snakemake_progs/19.evolution_analyses.R {input.SI_promoters} {input.mean_phastCons_scores} {input.mean_phyloP_scores} {output.evo_output} > {log} 2>&1'
+
+
+rule filtered_sequences:
+    input:
+        genes_files = '../../data/drosophila/gene_ID/{p_type}/{sample}_ID.txt',
+        all_sequences = '../../data/drosophila/sequences/{p_type}.filtered_{type}_sequences.fa'
+    output:
+        filtered_sequences = expand('../../results/drosophila/{p_type}/analyses/positive_selection/{type}_sequences/{sample}.filtered_{type}_sequences.fa', p_type = promoters_type, sample = clusters, type = node)
+    shell:
+        'python Snakemake_progs/20.filtered_sequences.py {input.genes_files} {input.all_sequences} {output.filtered_sequences}'
+
+
+rule deltaSVM:
+    input:
+        ancestral_sequences = '../../results/drosophila/{p_type}/analyses/positive_selection/ancestral_sequences/{sample}.filtered_ancestral_sequences.fa',
+        focal_sequences = '../../results/drosophila/{p_type}/analyses/positive_selection/focal_sequences/{sample}.filtered_focal_sequences.fa',
+        pred = '../../results/drosophila/{p_type}/prediction/clusters_pos_neg/{sample}.model.txt'
+    output:
+        all_deltaSVM_scores = '../../results/drosophila/{p_type}/analyses/positive_selection/deltas/{sample}.ancestral_all_possible_deltaSVM.txt',
+        focal_deltaSVM_scores = '../../results/drosophila/{p_type}/analyses/positive_selection/deltas/{sample}.ancestral_to_observed_deltaSVM.txt'
+    shell:
+        'python Snakemake_progs/21.compute_all_deltaSVM_light.py {input.ancestral_sequences} {input.focal_sequences} {input.pred} {output.all_deltaSVM_scores} {output.focal_deltaSVM_scores}'
+
+
+rule MaxLL_estimation:
+    input:
+        all_deltaSVM_scores = '../../results/drosophila/{p_type}/analyses/positive_selection/deltas/{sample}.ancestral_all_possible_deltaSVM.txt',
+        focal_deltaSVM_scores = '../../results/drosophila/{p_type}/analyses/positive_selection/deltas/{sample}.ancestral_to_observed_deltaSVM.txt'
+    output:
+        positive_selection_results = '../../results/drosophila/{p_type}/analyses/positive_selection/MLE_summary/{sample}_ancestral.csv'
+    shell:
+        'python Snakemake_progs/22.MaxLL_estimation_light.py {input.all_deltaSVM_scores} {input.focal_deltaSVM_scores} {output.positive_selection_results}'
+
+
+rule evolution_model_analyses:
+    input:
+        positive_selection_results = expand('../../results/drosophila/{{p_type}}/analyses/positive_selection/MLE_summary/{sample}_ancestral.csv', sample = clusters),
+        studied = '../../data/drosophila/assigned.modules.txt'
+    output:
+        analyses = '../../results/drosophila/{p_type}/analyses/positive_selection/MLE_analyses.pdf'
+    shell:
+        'Rscript Snakemake_progs/23.evolution_model_analyses.R {input.positive_selection_results} {input.studied} {output.analyses}'

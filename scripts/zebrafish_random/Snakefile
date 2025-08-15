@@ -1,0 +1,180 @@
+###### programmes stage - snakemake
+
+
+clusters = ['sample1', 'sample2', 'sample3']
+set_type = ['posSet','negSet']
+
+
+rule all:
+    input:
+        Sequences = expand('../../results/zebrafish_random/sets/{s_type}/sequences/{sample}.fasta', s_type = set_type, sample = clusters),
+        heatmap  = '../../results/zebrafish_random/analyses/heatmap.pdf',
+        simple_AUC = '../../results/zebrafish_random/analyses/AUC/AUC.pdf',
+        pred_pos = expand('../../results/zebrafish_random/prediction/training_cluster/{sample_to_score}_pos.pred.using_{sample}_model.txt', sample_to_score = clusters, sample = clusters),
+        pred_neg = expand('../../results/zebrafish_random/prediction/training_cluster/{sample_to_score}_neg.pred.using_{sample}_model.txt', sample_to_score = clusters, sample = clusters),
+        pred_AUC_pdf = expand('../../results/zebrafish_random/analyses/AUC/training_cluster/{sample}_scores_OtherModel.pdf', sample = clusters),
+        all_sequences_scores = '../../results/zebrafish_random/analyses/scores/all_scores.csv',
+
+
+
+rule promoters_coord:
+    input:
+        zebrafish_genes = '../../data/zebrafish_random/genes_information.txt',
+        conversion_file = '../../data/zebrafish_random/chromosome_ensembl2UCSC.txt'
+    output:
+        promoters_coord = '../../results/zebrafish_random/promoters_infos/nonclean_promoters_coord.bed',
+    params:
+        promoter_length = 2000
+    shell:
+        'Rscript Snakemake_progs/1.promoters_coord.R {params.promoter_length} {input.zebrafish_genes} {input.conversion_file} {output.promoters_coord}'
+
+
+rule cleaning:
+    input:
+        promoters_coord = '../../results/zebrafish_random/promoters_infos/nonclean_promoters_coord.bed',
+        all_genes = '../../data/zebrafish_random/zebrafish_all_genes.bed'
+    output:
+        clean_Set = '../../results/zebrafish_random/promoters_infos/clean_coord.bed'
+    shell:
+        '../../tools/bedtools2/bin/bedtools subtract -a {input.promoters_coord} -b {input.all_genes} > {output.clean_Set}'
+
+
+rule cleaning2:
+    input:
+        clean_Set = '../../results/zebrafish_random/promoters_infos/clean_coord.bed'
+    output:
+        clean2_Set = '../../results/zebrafish_random/promoters_infos/promoters_coord.bed'
+    shell:
+        'Rscript Snakemake_progs/2.cleaning_sets.R {input.clean_Set} {output.clean2_Set}'
+
+
+rule pos_Set:
+    input:
+        clean2_Set = '../../results/zebrafish_random/promoters_infos/promoters_coord.bed',
+        modules = '../../data/zebrafish_random/clusters/DRE_expr.var.bias.{sample}.txt'
+    output:
+        pos_Set = '../../results/zebrafish_random/sets/posSet/bed_files/{sample}.bed'
+    shell:
+        'Rscript Snakemake_progs/3.ML_files.R {input.clean2_Set} {input.modules} {output.pos_Set}'
+
+
+rule neg_bed_files:
+    input:
+        pos_Set = '../../results/zebrafish_random/sets/posSet/bed_files/{sample}.bed'
+    output:
+        neg_Set = '../../results/zebrafish_random/sets/negSet/bed_files/{sample}.bed'
+    shell:
+        'Rscript Snakemake_progs/4.generate_negative_sequence.R zebrafish {input.pos_Set} {output.neg_Set}'
+
+
+rule sequences:
+    input:
+        Set = '../../results/zebrafish_random/sets/{s_type}/bed_files/{sample}.bed'
+    output:
+        Sequences = '../../results/zebrafish_random/sets/{s_type}/sequences/{sample}.fasta'
+    shell:
+        'python Snakemake_progs/5.promoters_sequences.py {input.Set} {output.Sequences}'
+
+
+rule train_ML:
+    input:
+        pos_seq = '../../results/zebrafish_random/sets/posSet/sequences/{sample}.fasta',
+        neg_seq = '../../results/zebrafish_random/sets/negSet/sequences/{sample}.fasta'
+    output:
+        train = '../../results/zebrafish_random/train_model/{sample}.model.txt'
+    log: '../../results/zebrafish_random/train_model/log/{sample}.log'
+    shell:
+        '../../tools/lsgkm/bin/gkmtrain -r 12 -l 10 {input.pos_seq} {input.neg_seq} ../../results/zebrafish_random/train_model/{wildcards.sample} > {log} 2>&1'
+
+
+rule cross_validation:
+    input:
+        pos_seq = '../../results/zebrafish_random/sets/posSet/sequences/{sample}.fasta',
+        neg_seq = '../../results/zebrafish_random/sets/negSet/sequences/{sample}.fasta'
+    output:
+        cross_val = '../../results/zebrafish_random/cross_validation/{sample}.cvpred.txt'
+    log: '../../results/zebrafish_random/cross_validation/log/{sample}.log'
+    shell:
+        '../../tools/lsgkm/bin/gkmtrain -r 12 -l 10 -x5 {input.pos_seq} {input.neg_seq} ../../results/zebrafish_random/cross_validation/{wildcards.sample} > {log} 2>&1'
+
+
+rule prediction:
+    input:
+        kmers = '../../data/zebrafish_random/sequences/kmer.fa',
+        train = '../../results/zebrafish_random/train_model/{sample}.model.txt'
+    output:
+        pred = '../../results/zebrafish_random/prediction/{sample}.pred.txt'
+    log: '../../results/zebrafish_random/prediction/log/{sample}.log'
+    shell:
+        '../../tools/lsgkm/bin/gkmpredict -T 1 {input.kmers} {input.train} {output.pred} > {log} 2>&1'
+
+
+rule scores:
+    input:
+        pred = expand('../../results/zebrafish_random/prediction/{sample}.pred.txt', sample = clusters)
+    output:
+        scores = '../../results/zebrafish_random/prediction/scores.csv'
+    shell:
+        'Rscript Snakemake_progs/6.scores.R {input.pred} {output.scores}'
+
+
+rule sequences_scores:
+    input:
+        pred = '../../results/zebrafish_random/prediction/{sample}.pred.txt',
+        Sequences = '../../results/zebrafish_random/sets/posSet/sequences/{sample}.fasta'
+    output:
+        sequences_scores = '../../results/zebrafish_random/analyses/scores/scores_{sample}.csv'
+    shell:
+        'python Snakemake_progs/7.all_scores.py {input.pred} {input.Sequences} {output.sequences_scores}'
+
+
+rule heatmap:
+    input:
+        scores = '../../results/zebrafish_random/prediction/scores.csv'
+    output:
+        heatmap  = '../../results/zebrafish_random/analyses/heatmap.pdf'
+    shell:
+        'python Snakemake_progs/8.heatmap.py {input.scores} {output.heatmap}'
+
+
+rule simple_AUC:
+    input:
+        cross_val = expand('../../results/zebrafish_random/cross_validation/{sample}.cvpred.txt', sample = clusters)
+    output:
+        simple_AUC = '../../results/zebrafish_random/analyses/AUC/AUC.pdf'
+    shell:
+        'Rscript Snakemake_progs/9.all_AUC.R {input.cross_val} {output.simple_AUC}'
+
+
+rule combined_sequences_scores:
+    input:
+        sequences_scores = expand('../../results/zebrafish_random/analyses/scores/scores_{sample}.csv', sample = clusters)
+    output:
+        all_sequences_scores = '../../results/zebrafish_random/analyses/scores/all_scores.csv'
+    shell:
+        'Rscript Snakemake_progs/10.combined_seq_scores.R {input.sequences_scores} {output.all_sequences_scores}'
+
+
+rule PredictionOtherModel:
+    input:
+        pos_seq = '../../results/zebrafish_random/sets/posSet/sequences/{sample}.fasta',
+        neg_seq = '../../results/zebrafish_random/sets/negSet/sequences/{sample_to_score}.fasta',
+        train = '../../results/zebrafish_random/train_model/{sample}.model.txt'
+    output:
+        pred_pos = '../../results/zebrafish_random/prediction/training_cluster/{sample_to_score}_pos.pred.using_{sample}_model.txt',
+        pred_neg = '../../results/zebrafish_random/prediction/training_cluster/{sample_to_score}_neg.pred.using_{sample}_model.txt'
+    log:
+        '../../results/zebrafish_random/prediction/logOtherModel/{sample_to_score}_using_{sample}.log'
+    run:
+        shell("../../tools/lsgkm/bin/gkmpredict -T 1 {input.pos_seq} {input.train} {output.pred_pos} > {log} 2>&1")
+        shell("../../tools/lsgkm/bin/gkmpredict -T 1 {input.neg_seq} {input.train} {output.pred_neg} >> {log} 2>&1")
+
+
+rule pred_AUC_OtherModel:
+    input:
+        pred_pos = expand('../../results/zebrafish_random/prediction/training_cluster/{sample_to_score}_pos.pred.using_{{sample}}_model.txt', sample_to_score = clusters),
+        pred_neg = expand('../../results/zebrafish_random/prediction/training_cluster/{sample_to_score}_neg.pred.using_{{sample}}_model.txt', sample_to_score = clusters)
+    output:
+        pred_AUC_pdf = '../../results/zebrafish_random/analyses/AUC/training_cluster/{sample}_scores_OtherModel.pdf'
+    shell:
+        "Rscript Snakemake_progs/11.pred_AUC_OtherModel.R {input.pred_pos} {input.pred_neg} {output.pred_AUC_pdf}"
