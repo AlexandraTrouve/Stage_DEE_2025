@@ -51,7 +51,7 @@ rule cleaning2:
 rule pos_Set:
     input:
         clean2_Set = '../../results/zebrafish_random/promoters_infos/promoters_coord.bed',
-        modules = '../../data/zebrafish_random/clusters/DRE_expr.var.bias.{sample}.txt'
+        modules = '../../data/zebrafish_random/clusters/DRE_expr.var.bias.random.{sample}.txt'
     output:
         pos_Set = '../../results/zebrafish_random/sets/posSet/bed_files/{sample}.bed'
     shell:

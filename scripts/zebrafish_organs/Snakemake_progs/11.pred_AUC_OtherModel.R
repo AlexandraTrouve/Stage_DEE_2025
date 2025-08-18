@@ -88,16 +88,16 @@ plotColors<-c("thistle2","pink","lightblue","darkseagreen3","lightsalmon","snow3
 names(plotColors) <- c("brain","ovary","testis","eye","liver","pectoral_fin","gills","intestine")
 
 par(mar=c(5,5,2,2))
-plot(unlist(aucOthers[[1]][1]),unlist(aucOthers[[2]][1]),col=plotColors[plotLegend[[1]]], lwd = 3,cex=1.5,main=paste0("ROC curves for model train on ",model," promoters"),xlab="False positive rate",ylab="Ture positive rate",
+plot(unlist(aucOthers[[1]][1]),unlist(aucOthers[[2]][1]),col=plotColors[plotLegend[[1]]], lwd = 1,cex=1.5,main=paste0("ROC curves for model train on ",model," promoters"),xlab="False positive rate",ylab="Ture positive rate",
      cex.axis=1.5,cex.lab=1.5,cex.main=1.5,type="l")
-legend(0.3,0.40,paste(plotLegend[[1]]," ","(AUC = ",round(aucOthers[[3]][1],digits = 3),")",sep=""),lwd = 3,bty="n",cex=1.4,col = plotColors[plotLegend[[1]]]) 
+legend(0.3,0.40,paste(plotLegend[[1]]," ","(AUC = ",round(aucOthers[[3]][1],digits = 3),")",sep=""),lwd = 1,bty="n",cex=1.4,col = plotColors[plotLegend[[1]]]) 
 
 for (i in 2:7) {
-  lines(unlist(aucOthers[[1]][i]),unlist(aucOthers[[2]][i]),col=plotColors[plotLegend[[i]]],lwd=3)}
+  lines(unlist(aucOthers[[1]][i]),unlist(aucOthers[[2]][i]),col=plotColors[plotLegend[[i]]],lwd=1)}
 
 legendY<-c(0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.05)
 for (i in 2:7) {
   legendName<-paste(plotLegend[[i]]," ","(AUC = ",round(aucOthers[[3]][i],digits = 3),")",sep="")
-  legend(0.3,legendY[i-1],legendName,lwd = 3,bty="n",cex=1.4,col = plotColors[plotLegend[[i]]])}
+  legend(0.3,legendY[i-1],legendName,lwd = 1,bty="n",cex=1.4,col = plotColors[plotLegend[[i]]])}
 
 dev.off()

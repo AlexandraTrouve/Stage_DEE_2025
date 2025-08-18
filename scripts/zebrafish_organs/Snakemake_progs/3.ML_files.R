@@ -18,7 +18,14 @@ promoters <- subset(promoters, gene_name %in% studied$gene_name)
 promoters <- promoters %>%
   filter(!is.na(start))
 
-write.table(promoters,
+if (nrow(promoters) > 1000) {
+  set.seed(42)
+  promoters_sampled <- promoters[sample(nrow(promoters), 1000),]
+} else {
+  promoters_sampled <- promoters
+}
+
+write.table(promoters_sampled,
           file = output_file,
           sep = "\t",          
           quote = FALSE,       
